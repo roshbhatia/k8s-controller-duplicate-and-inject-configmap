@@ -3,9 +3,8 @@ kind: Pod
 metadata:
   name: sample
   annotations:
-    inject-configmap: "sample"
+    duplicate-and-inject-configmap: "sample"
 spec:
   containers:
   - name: sample
-    image: busybox
-    command: ["sleep", "3600"]
+    image: nginxdemos/hello
