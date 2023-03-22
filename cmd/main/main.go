@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -47,8 +49,10 @@ func main() {
 	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			newPod := obj.(*corev1.Pod)
-			if _, ok := newPod.Annotations[annotationKey]; ok {
+			if configMapName, ok := newPod.Annotations[annotationKey]; ok {
 				klog.Info("Found new pod with annotation")
+				klog.Info("Injecting environment variables from ConfigMap")
+				injectConfigMapIntoEnv(newPod, configMapName, clientset)
 			}
 		},
 	})
@@ -57,4 +61,16 @@ func main() {
 	defer close(shouldExit)
 	factory.Start(shouldExit)
 	<-shouldExit
+}
+
+
+func injectConfigMapIntoEnv(pod *corev1.Pod, configMapName string, clientset *kubernetes.Clientset) {
+	ctx := context.Background()
+
+	configMap, err := clientset.CoreV1().ConfigMaps(pod.Namespace).Get(ctx, configMapName, metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("Error fetching ConfigMap %s: %v\n", configMapName, err)
+		return
+	}
+	klog.Infof("Found ConfigMap %s: %v", configMapName, configMap.Data)
 }
