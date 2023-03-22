@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	annotationKey = "inject-configmap"
+	annotationKey = "duplicate-and-inject-configmap"
 )
 
 var (
@@ -51,7 +51,6 @@ func main() {
 			newPod := obj.(*corev1.Pod)
 			if configMapName, ok := newPod.Annotations[annotationKey]; ok {
 				klog.Info("Found new pod with annotation")
-				klog.Info("Injecting environment variables from ConfigMap")
 				injectConfigMapIntoEnv(newPod, configMapName, clientset)
 			}
 		},
@@ -73,11 +72,11 @@ func injectConfigMapIntoEnv(pod *corev1.Pod, configMapName string, clientset *ku
 	}
 	klog.Infof("Found ConfigMap %s: %v", configMapName, configMap.Data)
 
-	klog.Info("Injecting environment variables into pod's container")
+	klog.Info("Injecting environment variables into pod's container definition.")
 
-	klog.Infof("Pod before update: %v", pod)
+	klog.Infof("Original pod: %v", pod)
 
-		// Map ConfigMap key value pairs into something we can inject.
+	// Map ConfigMap key value pairs into something we can inject.
 	envVars := []corev1.EnvVar{}
 	for k, v := range configMap.Data {
 		envVar := corev1.EnvVar{
@@ -87,8 +86,29 @@ func injectConfigMapIntoEnv(pod *corev1.Pod, configMapName string, clientset *ku
 		envVars = append(envVars, envVar)
 	}
 
-	// Assume pod is of size one, as that's what we're testing with.
-	pod.Spec.Containers[0].Env = envVars
+	newPod := pod.DeepCopy()	
 
-	klog.Infof("Updated pod: %v", pod)
+	newPod.Name = pod.Name + "-with-env-injected"
+
+	// Assume pod is of size one, as that's what we're testing with.
+	newPod.Spec.Containers[0].Env = envVars
+
+	// Reset the resource version as that's set by the API server.
+	newPod.SetResourceVersion("")
+	
+
+	delete(newPod.Annotations, annotationKey)
+
+	klog.Infof("Updated + duplicated pod: %v", newPod)
+
+	_, err = clientset.CoreV1().Pods(pod.Namespace).Create(ctx, newPod, metav1.CreateOptions{
+		FieldValidation: "Ignore",
+		FieldManager: "env-injector-controller",
+	})
+	if err != nil {
+		klog.Errorf("Error duplicating Pod %s: %v\n", pod.Name, err)
+		return
+	}
+
+	klog.Infof("Successfully duplicated Pod %s", pod.Name)
 }
