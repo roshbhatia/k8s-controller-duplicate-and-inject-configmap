@@ -51,13 +51,6 @@ func main() {
 				klog.Info("Found new pod with annotation")
 			}
 		},
-		UpdateFunc: func(_, newObj interface{}) {
-			newPod := newObj.(*corev1.Pod)
-
-			if _, ok := newPod.Annotations[annotationKey]; ok {
-				klog.Info("Found updated pod with annotation")
-			}
-		},
 	})
 
 	shouldExit := make(chan struct{})
