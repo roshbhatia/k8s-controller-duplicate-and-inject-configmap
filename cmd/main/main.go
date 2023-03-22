@@ -1,20 +1,29 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"flag"
 
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
+)
+
+var (
+	masterURL  string
+	kubeconfig string
 )
 
 func main() {
-	fmt.Println("Loading k8s config")
-	kubeconfig := os.Getenv("KUBECONFIG")
+	klog.Info("Initializing controller")
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	klog.InitFlags(nil)
+	flag.Parse()
+
+	cfg, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
 	if err != nil {
-		panic(err.Error())
+		klog.Error(err, "Error building kubeconfig")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
-	fmt.Println(config)
+
+	klog.Infof("Parsed config: %v", cfg)
 }
