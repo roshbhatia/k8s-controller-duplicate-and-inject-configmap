@@ -10,7 +10,7 @@ metadata:
 rules:
 - apiGroups: [""]
   resources: ["pods", "configmaps"]
-  verbs: ["get", "watch", "list", "update"]
+  verbs: ["get", "watch", "list", "create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
