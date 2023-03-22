@@ -1,14 +1,12 @@
-.PHONY: build-docker-image load-docker-image deploy clean
+.PHONY: build-and-load-docker-image deploy clean create-kind-cluster delete-kind-cluster reset-kind-cluster
 
 DOCKER_IMAGE_NAME := env-injector-controller:local
 
 build:
 	go build -o ./bin/env-injector-controller ./cmd/main/main.go
 
-build-docker-image:
+build-and-load-docker-image:
 	docker build -t $(DOCKER_IMAGE_NAME) .
-
-load-docker-image:
 	kind load docker-image $(DOCKER_IMAGE_NAME) --name kind
 
 deploy:
