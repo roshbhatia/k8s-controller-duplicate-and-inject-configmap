@@ -63,7 +63,6 @@ func main() {
 	<-shouldExit
 }
 
-
 func injectConfigMapIntoEnv(pod *corev1.Pod, configMapName string, clientset *kubernetes.Clientset) {
 	ctx := context.Background()
 
@@ -73,4 +72,23 @@ func injectConfigMapIntoEnv(pod *corev1.Pod, configMapName string, clientset *ku
 		return
 	}
 	klog.Infof("Found ConfigMap %s: %v", configMapName, configMap.Data)
+
+	klog.Info("Injecting environment variables into pod's container")
+
+	klog.Infof("Pod before update: %v", pod)
+
+		// Map ConfigMap key value pairs into something we can inject.
+	envVars := []corev1.EnvVar{}
+	for k, v := range configMap.Data {
+		envVar := corev1.EnvVar{
+			Name:  k,
+			Value: v,
+		}
+		envVars = append(envVars, envVar)
+	}
+
+	// Assume pod is of size one, as that's what we're testing with.
+	pod.Spec.Containers[0].Env = envVars
+
+	klog.Infof("Updated pod: %v", pod)
 }
