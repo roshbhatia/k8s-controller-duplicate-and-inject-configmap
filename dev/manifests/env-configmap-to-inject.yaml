@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sample
+data:
+  SOME_ENV_VAR: "123"
+  ANOTHER_ENV_VAR: "234"

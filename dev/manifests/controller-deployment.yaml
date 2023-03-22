@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: env-injector-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: env-injector-controller
+  template:
+    metadata:
+      labels:
+        app: env-injector-controller
+    spec:
+      containers:
+      - name: env-injector-controller
+        image: env-injector-controller
