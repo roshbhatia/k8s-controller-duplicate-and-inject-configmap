@@ -8,10 +8,10 @@ build:
 build-docker-image:
 	docker build -t $(DOCKER_IMAGE_NAME) .
 
-load-docker-image: build-docker-image
+load-docker-image:
 	kind load docker-image $(DOCKER_IMAGE_NAME) --name kind
 
-deploy: load-docker-image
+deploy:
 	kubectl apply -f dev/manifests/controller-deployment.yaml --context kind-kind
 	kubectl apply -f dev/manifests/env-configmap-to-inject.yaml --context kind-kind
 	kubectl apply -f dev/manifests/pod-with-annotation.yaml --context kind-kind
