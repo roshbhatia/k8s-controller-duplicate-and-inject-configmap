@@ -15,3 +15,4 @@ spec:
       containers:
       - name: env-injector-controller
         image: env-injector-controller
+      restartPolicy: Always
