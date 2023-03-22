@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	annotationKey = "duplicate-and-inject-configmap"
+	annotationKey   = "duplicate-and-inject-configmap"
+	clonedPodSuffix = "-with-env-injected"
 )
 
 var (
@@ -25,8 +26,6 @@ var (
 )
 
 func main() {
-	klog.Info("Initializing controller")
-
 	klog.InitFlags(nil)
 	flag.Parse()
 
@@ -43,15 +42,44 @@ func main() {
 		panic(err.Error())
 	}
 
+	ctx := context.Background()
+
+	klog.Info("Initialized controller")
+
 	factory := informers.NewSharedInformerFactory(clientset, 30*time.Second)
 	podInformer := factory.Core().V1().Pods().Informer()
 
 	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			newPod := obj.(*corev1.Pod)
-			if configMapName, ok := newPod.Annotations[annotationKey]; ok {
+			pod := obj.(*corev1.Pod)
+			if configMapName, ok := pod.Annotations[annotationKey]; ok {
 				klog.Info("Found new pod with annotation")
-				injectConfigMapIntoEnv(newPod, configMapName, clientset)
+
+				configMap, err := clientset.CoreV1().ConfigMaps(pod.Namespace).Get(ctx, configMapName, metav1.GetOptions{})
+				if err != nil {
+					klog.Errorf("Error fetching ConfigMap %s: %v\n", configMapName, err)
+					return
+				}
+				klog.Info("Fetched referenced ConfigMap: %v", configMap)
+
+				newPod, err := clonePodWithModifications(pod, configMap, clientset)
+				if err != nil {
+					klog.Errorf("Error attempting to clone and modify pod: %v\n", err)
+					return
+				}
+				klog.Infof("Cloned pod definition and injected ConfigMap into env: %v", newPod)
+
+				_, err = clientset.CoreV1().Pods(newPod.Namespace).Create(ctx, newPod, metav1.CreateOptions{
+					FieldValidation: "Ignore",
+					// This field will be present in the final manifest.
+					FieldManager: "env-injector-controller",
+				})
+
+				if err != nil {
+					klog.Errorf("Error creating new pod: %v\n", err)
+					return
+				}
+				klog.Infof("Created new pod: %v", newPod)
 			}
 		},
 	})
@@ -62,20 +90,7 @@ func main() {
 	<-shouldExit
 }
 
-func injectConfigMapIntoEnv(pod *corev1.Pod, configMapName string, clientset *kubernetes.Clientset) {
-	ctx := context.Background()
-
-	configMap, err := clientset.CoreV1().ConfigMaps(pod.Namespace).Get(ctx, configMapName, metav1.GetOptions{})
-	if err != nil {
-		klog.Errorf("Error fetching ConfigMap %s: %v\n", configMapName, err)
-		return
-	}
-	klog.Infof("Found ConfigMap %s: %v", configMapName, configMap.Data)
-
-	klog.Info("Injecting environment variables into pod's container definition.")
-
-	klog.Infof("Original pod: %v", pod)
-
+func clonePodWithModifications(pod *corev1.Pod, configMap *corev1.ConfigMap, clientset *kubernetes.Clientset) (newPod *corev1.Pod, err error) {
 	// Map ConfigMap key value pairs into something we can inject.
 	envVars := []corev1.EnvVar{}
 	for k, v := range configMap.Data {
@@ -86,29 +101,23 @@ func injectConfigMapIntoEnv(pod *corev1.Pod, configMapName string, clientset *ku
 		envVars = append(envVars, envVar)
 	}
 
-	newPod := pod.DeepCopy()	
+	newPod = pod.DeepCopy()
 
-	newPod.Name = pod.Name + "-with-env-injected"
+	newPod.Name = pod.Name + clonedPodSuffix
 
-	// Assume pod is of size one, as that's what we're testing with.
+	// We're making the assumption that the pod is of size one, as that's what we're testing with.
 	newPod.Spec.Containers[0].Env = envVars
 
 	// Reset the resource version as that's set by the API server.
 	newPod.SetResourceVersion("")
-	
 
+	// Remove the annotation so the controller doesn't pick up the new pod.
 	delete(newPod.Annotations, annotationKey)
 
-	klog.Infof("Updated + duplicated pod: %v", newPod)
-
-	_, err = clientset.CoreV1().Pods(pod.Namespace).Create(ctx, newPod, metav1.CreateOptions{
-		FieldValidation: "Ignore",
-		FieldManager: "env-injector-controller",
-	})
 	if err != nil {
 		klog.Errorf("Error duplicating Pod %s: %v\n", pod.Name, err)
-		return
+		return nil, err
 	}
 
-	klog.Infof("Successfully duplicated Pod %s", pod.Name)
+	return newPod, nil
 }
